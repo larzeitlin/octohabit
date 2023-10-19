@@ -1,113 +1,197 @@
 (require
  '[reagent.core :as r]
- '[reagent.dom :as rdom])
+ '[reagent.dom :as rdom]
+ '[clojure.string :as string]
+ '[clojure.edn :as edn]
+ '[clojure.walk :as walk])
 
 (def DAY-MILLIS (* 24 60 60 1000))
 (def DATE-NOW (js/Date.))
+(def N-DAYS 7)
+(def chart-width 50)
 
-(def state (r/atom {:tasks [{:title "default" :dates []}]}))
+(def state (r/atom nil))
 (def enter-task-state (r/atom ""))
 (def task-id-atom (r/atom 0))
 
+
+(defn edn-to-url-param [edn-data]
+  (let [edn-str (pr-str edn-data)]
+    (js/encodeURIComponent edn-str)))
+
+(defn set-data-param [value]
+  (let [encoded-value (js/encodeURIComponent (pr-str value))
+        new-url (str js/location.protocol "//" 
+                     js/location.host 
+                     js/location.pathname 
+                     "?data=" encoded-value)]
+    (js/history.pushState nil "" new-url)))
+
+(defn send-data-via-email []
+  (let [current-url js/location.href
+        subject "Your Habit Tracker Data Link"
+        body (str "Access your data by clicking on the following link:\n\n" current-url)
+        encoded-body (js/encodeURIComponent body)
+        mailto-link (str "mailto:?subject=" subject "&body=" encoded-body)]
+    (js/window.open mailto-link)))
+
 (defn append-task []
-  (swap! state update :tasks conj {:title @enter-task-state
-                                   :dates []
-                                   :id (swap! task-id-atom inc)}))
+  (set-data-param
+   (swap! state update :tasks conj {:title @enter-task-state
+                                    :dates []
+                                    :id (swap! task-id-atom inc)})))
 
 (defn delete-task [id]
-  (swap! state update :tasks (fn [tasks]
-                               (remove
-                                #(= (:id %) id)
-                                tasks))))
+  (set-data-param
+   (swap! state update :tasks (fn [tasks]
+                                (remove
+                                 #(= (:id %) id)
+                                 tasks)))))
 
 (defn reset-enter-task-field []
   (reset! enter-task-state ""))
 
 (defn task-input []
-  [:input {:type "text"
-           :id "enter_task"
-           :name "task"
-           :value @enter-task-state
-           :on-change #(reset! enter-task-state (-> %
-                                                    .-target
-                                                    .-value))}])
+  [:label {:for "enter_task"} "Habit"
+   [:input {:type "text"
+            :id "enter_task"
+            :name "task"
+            :placeholder "Go for a walk"
+            :value @enter-task-state
+            :on-change #(reset! enter-task-state (-> %
+                                                     .-target
+                                                     .-value))}]])
+
+
+(def cell-style {
+                 :vertical-align "middle"
+                 :text-align "center"})
 
 (defn table-date-row [{:keys [date-now n-days]}]
   (into 
    [:tr
     [:th ""]
     [:th ""]]
-   (map #(vector :td
+   (map #(vector :td {:style cell-style}
                  (->> (- date-now (* % DAY-MILLIS))
                       (js/Date.)
                       (.getDate)
                       ))
         (range (dec n-days) -1 -1))))
 
-(def close-button-svg
-  [:svg {:xml:space "preserve"
-         :width "512px"
-         :viewbox "0 0 512 512"
-         :style "enable-background:new 0 0 512 512;"
-         :height "512px"}
-   [:path {:d "M443.6,387.1L312.4,255.4l131.5-130c5.4-5.4,5.4-14.2,0-19.6l-37.4-37.6c-2.6-2.6-6.1-4-9.8-4c-3.7,0-7.2,1.5-9.8,4  L256,197.8L124.9,68.3c-2.6-2.6-6.1-4-9.8-4c-3.7,0-7.2,1.5-9.8,4L68,105.9c-5.4,5.4-5.4,14.2,0,19.6l131.5,130L68.4,387.1  c-2.6,2.6-4.1,6.1-4.1,9.8c0,3.7,1.4,7.2,4.1,9.8l37.4,37.6c2.7,2.7,6.2,4.1,9.8,4.1c3.5,0,7.1-1.3,9.8-4.1L256,313.1l130.7,131.1  c2.7,2.7,6.2,4.1,9.8,4.1c3.5,0,7.1-1.3,9.8-4.1l37.4-37.6c2.6-2.6,4.1-6.1,4.1-9.8C447.7,393.2,446.2,389.7,443.6,387.1z"}]])
-
-
 (defn toggle-checkbox [{:keys [checkbox date id]}]
   (let [checked? (->> checkbox .-target .-checked)
         update-fn (if checked?
                     #(do (conj % date))
                     #(remove #{date} %))]
+    (set-data-param
     (swap! state update :tasks
            (fn [tasks]
              (for [t tasks]
                (if (= id (:id t))
                  (update t :dates update-fn)
-                 t))))))
+                 t)))))))
+
 
 (defn checkbox-row [{:keys [task n-days]}]
   (into [:tr 
-         [:td [:button {:style {:padding "5px"
+         [:td {:style cell-style}
+          [:button
+           {:style {:padding "2px"
+                    :display "block"
+                    :margin "auto"
+                    :width "2em"
+                    :height "2em"}
+                    :on-click #(delete-task (:id task))}
+               "☒"]]
+         [:th [:div (:title task)]]
+         (conj
+          (for [d (range (dec n-days) -1 -1)]
+            (let [date (->> 
+                        (- DATE-NOW (* d DAY-MILLIS))
+                        (js/Date.)
+                        (.toISOString)
+                        (#(subs % 0 10))) 
+                  checkbox-id (str (:title task)
+                                   "-"
+                                   date)]
+              [:td {:style cell-style}
+               [:input {:type "checkbox"
+                        :checked (->> task :dates (some #{date}))
+                        :on-click #(toggle-checkbox {:checkbox %
+                                                     :date date
+                                                     :id (:id task)})
+                        :style {:padding "2px"
                                 :display "block"
-                                :margin "auto"}
-                        :on-click #(delete-task (:id task))}
-               "\u2716"]]
-         [:th (:title task)]
-         (for [d (range (dec n-days) -1 -1)]
-           (let [date (->> 
-                       (- DATE-NOW (* d DAY-MILLIS))
-                       (js/Date.)
-                       (.toISOString)
-                       (#(subs % 0 10))) 
-                 checkbox-id (str (:title task)
-                         "-"
-                         date)]
-             [:td [:input {:type "checkbox"
-                           :on-click #(toggle-checkbox {:checkbox %
-                                                        :date date
-                                                        :id (:id task)})
-                           :id checkbox-id}]]))]))
+                                :margin "auto"
+                                :width "2em"
+                                :height "2em"}
+                        :id checkbox-id}]
+               [:label {:for checkbox-id}]])))]))
 
 (defn checkbox-table [{:keys [n-days tasks date-now]}]
+  [:article
   [:table {:style {:text-align "center"}}
       [table-date-row {:date-now date-now
                        :n-days n-days}]
       (for [task tasks]
-        [checkbox-row {:task task :n-days n-days}])])
+        [checkbox-row {:task task :n-days n-days}])]])
 
-(defn app [] 
-  (let [state @state
-        tasks (:tasks state)]
-    [:div
-     [:p "State: " (str state)]
-     [:label {:for "task"} "Enter a task"]
-     [task-input]
-     [:p [:button {:on-click #(do (append-task)
-                                  (reset-enter-task-field))}
-          "add task"]] 
-     (when (seq tasks)
-       [checkbox-table {:n-days 10
-                        :tasks tasks
-                        :date-now DATE-NOW}])]))
+
+
+(defn get-data-from-url
+  []
+  (->> js/window
+       (.-location)
+       (.-search)
+       (new js/URLSearchParams)
+       (seq)
+       (js->clj)
+       (into {})
+       (walk/keywordize-keys)
+       :data
+       edn/read-string))
+
+(defn app []
+  (r/create-class
+   {:display-name "lzb-app"
+    :component-did-mount
+    (fn []
+      (let [url-param-data
+            (or (get-data-from-url)
+                {:tasks [{:title "default"
+                          :dates []
+                          :id 0}]})] 
+        (reset! state url-param-data)))
+    :reagent-render
+    (fn []
+      (let [_ @state]
+        [:<>
+         [:nav.container-fluid
+          [:ul
+           [:li [:a {:href "http://www.lzeitlin.xyz/"}
+                 "lz blog"]]]]
+         [:main.container
+           [:details
+            [:summary {:role "button"
+                       :style {:text-align "center"}} "Add Habits"]
+            
+            [:article 
+             [task-input]
+             [:button
+              {:on-click #(do (append-task)
+                              (reset-enter-task-field)
+                              (set-data-param @state))
+               :disabled (string/blank? @enter-task-state)}
+              "+"]]]
+          
+          (when (seq (->> @state :tasks))
+            [checkbox-table {:n-days N-DAYS
+                             :tasks (->> @state :tasks (sort-by :id))
+                             :date-now DATE-NOW}])
+          [:button
+           {:on-click send-data-via-email}
+              "save to email"]]]))}))
 
 (rdom/render [app] (.getElementById js/document "app"))
+
