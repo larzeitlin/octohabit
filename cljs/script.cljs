@@ -12,6 +12,7 @@
 
 (def state (r/atom nil))
 (def enter-task-state (r/atom ""))
+(def email-address-state (r/atom ""))
 (def task-id-atom (r/atom 0))
 
 
@@ -29,10 +30,12 @@
 
 (defn send-data-via-email []
   (let [current-url js/location.href
+        address @email-address-state
         subject "Your Habit Tracker Data Link"
         body (str "Access your data by clicking on the following link:\n\n" current-url)
         encoded-body (js/encodeURIComponent body)
-        mailto-link (str "mailto:?subject=" subject "&body=" encoded-body)]
+        mailto-link (str "mailto:" address "?subject=" subject "&body=" encoded-body)]
+    (swap! state assoc :email address)
     (js/window.open mailto-link)))
 
 (defn append-task []
@@ -51,20 +54,19 @@
 (defn reset-enter-task-field []
   (reset! enter-task-state ""))
 
-(defn task-input []
-  [:label {:for "enter_task"} "Habit"
-   [:input {:type "text"
-            :id "enter_task"
-            :name "task"
-            :placeholder "Go for a walk"
-            :value @enter-task-state
-            :on-change #(reset! enter-task-state (-> %
-                                                     .-target
-                                                     .-value))}]])
+(defn input [{:keys [id label name input-type placeholder atom]}]
+  [:label {:for id} label
+   [:input {:type input-type
+            :id id
+            :name name
+            :placeholder placeholder
+            :value @atom
+            :on-change #(reset! atom (-> %
+                                         .-target
+                                         .-value))}]])
 
 
-(def cell-style {
-                 :vertical-align "middle"
+(def cell-style {:vertical-align "middle"
                  :text-align "center"})
 
 (defn table-date-row [{:keys [date-now n-days]}]
@@ -77,7 +79,7 @@
                       (js/Date.)
                       (.getDate)
                       ))
-        (range (dec n-days) -1 -1))))
+        (range 0 n-days 1))))
 
 (defn toggle-checkbox [{:keys [checkbox date id]}]
   (let [checked? (->> checkbox .-target .-checked)
@@ -106,7 +108,7 @@
                "☒"]]
          [:th [:div (:title task)]]
          (conj
-          (for [d (range (dec n-days) -1 -1)]
+          (for [d (range 0 n-days 1)]
             (let [date (->> 
                         (- DATE-NOW (* d DAY-MILLIS))
                         (js/Date.)
@@ -126,16 +128,16 @@
                                 :margin "auto"
                                 :width "2em"
                                 :height "2em"}
-                        :id checkbox-id}]
-               [:label {:for checkbox-id}]])))]))
+                        :id checkbox-id}]])))]))
 
 (defn checkbox-table [{:keys [n-days tasks date-now]}]
-  [:article
-  [:table {:style {:text-align "center"}}
-      [table-date-row {:date-now date-now
-                       :n-days n-days}]
-      (for [task tasks]
-        [checkbox-row {:task task :n-days n-days}])]])
+  [:div.container-fluid
+   [:figure
+    [:table {:style {:text-align "center"}}
+     [table-date-row {:date-now date-now
+                      :n-days n-days}]
+     (for [task tasks]
+       [checkbox-row {:task task :n-days n-days}])]]])
 
 
 
@@ -167,31 +169,55 @@
     (fn []
       (let [_ @state]
         [:<>
+         #_[:p (str @state)]
          [:nav.container-fluid
           [:ul
-           [:li [:a {:href "http://www.lzeitlin.xyz/"}
-                 "lz blog"]]]]
-         [:main.container
-           [:details
-            [:summary {:role "button"
-                       :style {:text-align "center"}} "Add Habits"]
-            
-            [:article 
-             [task-input]
+           [:li
+            [:a {:href "http://www.lzeitlin.xyz/"}
+             "lz blog"]]]
+          [:ul
+           [:li [:strong (-> @state :email)]]]
+          ]
+         [:main.container 
+          (if (string/blank? (-> @state :email))
+            [:article
+             [input {:id "enter_email_address"
+                     :label "Email Address"
+                     :input-type "email"
+                     :name "email"
+                     :placeholder "Your email address"
+                     :atom email-address-state}]
+             [:button {:on-click #(swap! state
+                                         assoc
+                                         :email
+                                         @email-address-state )}
+              "add email address"]]
+            [:div
              [:button
-              {:on-click #(do (append-task)
-                              (reset-enter-task-field)
-                              (set-data-param @state))
-               :disabled (string/blank? @enter-task-state)}
-              "+"]]]
-          
-          (when (seq (->> @state :tasks))
-            [checkbox-table {:n-days N-DAYS
-                             :tasks (->> @state :tasks (sort-by :id))
-                             :date-now DATE-NOW}])
-          [:button
-           {:on-click send-data-via-email}
-              "save to email"]]]))}))
+              {:on-click send-data-via-email
+               :style {:text-align "left"}}
+              "save to email"]
+             [:details
+              [:summary {:role "button"
+                         :style {:text-align "left"}} "add habits"]
+              
+              [:article 
+               [input {:id "enter_task"
+                       :label "new habit"
+                       :input-type "text"
+                       :name "task"
+                       :placeholder "go for a walk"
+                       :atom enter-task-state}]
+               [:button
+                {:on-click #(do (append-task)
+                                (reset-enter-task-field)
+                                (set-data-param @state))
+                 :disabled (string/blank? @enter-task-state)}
+                "+"]]]
+             (when (seq (-> @state :tasks))
+               [checkbox-table {:n-days N-DAYS
+                                :tasks (->> @state :tasks (sort-by :id))
+                                :date-now DATE-NOW}])])]]))}))
 
 (rdom/render [app] (.getElementById js/document "app"))
 
