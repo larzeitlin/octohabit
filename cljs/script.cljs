@@ -8,20 +8,105 @@
 (def DAY-MILLIS (* 24 60 60 1000))
 (def DATE-NOW (js/Date.))
 (def N-DAYS 7)
+(def MAX-HABITS 8)
+
 (def chart-width 50)
 
 (def state (r/atom nil))
 (def enter-task-state (r/atom ""))
 (def email-address-state (r/atom ""))
-(def task-id-atom (r/atom 0))
 
+(defn pad [n val coll]
+  (take n (concat coll (repeat val))))
 
-(defn edn-to-url-param [edn-data]
-  (let [edn-str (pr-str edn-data)]
-    (js/encodeURIComponent edn-str)))
+(defn habit-history-array [start-date dates]
+  (when (and (seq dates) start-date)
+    (let [end (or (->> dates last (js/Date.) (.getTime)))
+          start (->> start-date (js/Date.) (.getTime))
+          one-day (* 24 60 60 1000)
+          dates-range (range start (+ end one-day) one-day) 
+          dates-matches (set (map #(->> %
+                                        (js/Date.)
+                                        (.getTime))
+                                  dates))]
+      (->> dates-range
+           (map #(if (dates-matches %) 1 0))
+           (apply str)))))
+
+(defn edn->state-str [e]
+  (let [start-date (->> e
+                        :tasks
+                        (map :dates)
+                        (map first)
+                        (filter identity)
+                        sort
+                        first)
+        email (-> e :email)
+        task-names (->> e
+                        :tasks
+                        (map :title)
+                        (pad MAX-HABITS nil)
+                        (interpose ",")
+                        (apply str))
+        history-arrays (->> e
+                            :tasks
+                            (map :dates)
+                            (map (partial habit-history-array
+                                            start-date))
+                            (interpose ",")
+                            (apply str))
+        state-string (apply str (interpose ","
+                                           [start-date
+                                            email
+                                            task-names
+                                            history-arrays]
+                                           ))]
+    (js/LZString.compressToEncodedURIComponent state-string)))
+
+(defn binary-string->dates [start-date bin-str]
+  (->> bin-str
+       (map edn/read-string)
+       (map-indexed
+        (fn [idx b]
+          (let [d (js/Date. start-date)]
+            (when (= b 1)
+              (.setDate d (+ (.getDate d) idx))
+              (-> d
+                  (js/Date.)
+                  (.toISOString)
+                  (subs 0 10))))))
+       (filter identity)))
+
+(defn url-data->edn [s]
+  (let [decoded-str (js/LZString.decompressFromEncodedURIComponent s)
+        [start-date email & rst] (string/split decoded-str #",")
+        [habit-names history-arrays] (split-at 8 rst)
+        habit-names (remove string/blank? habit-names) 
+        history-arrays (map (partial binary-string->dates start-date)
+                            history-arrays)
+        habits (map
+                  (fn [n arr id] {:title n :dates arr :id id})
+                  habit-names
+                  history-arrays
+                  (range (count habit-names)))]
+    {:email email
+     :tasks habits}))
+
+(defn get-data-from-url
+  []
+  (->> js/window
+       (.-location)
+       (.-search)
+       (new js/URLSearchParams)
+       (seq)
+       (js->clj)
+       (into {})
+       (walk/keywordize-keys)
+       :data
+       url-data->edn))
 
 (defn set-data-param [value]
-  (let [encoded-value (js/encodeURIComponent (pr-str value))
+  (let [encoded-value (edn->state-str value)
         new-url (str js/location.protocol "//" 
                      js/location.host 
                      js/location.pathname 
@@ -42,7 +127,7 @@
   (set-data-param
    (swap! state update :tasks conj {:title @enter-task-state
                                     :dates []
-                                    :id (swap! task-id-atom inc)})))
+                                    :id (count (:tasks @state))})))
 
 (defn delete-task [id]
   (set-data-param
@@ -84,7 +169,7 @@
 (defn toggle-checkbox [{:keys [checkbox date id]}]
   (let [checked? (->> checkbox .-target .-checked)
         update-fn (if checked?
-                    #(do (conj % date))
+                    #(sort (conj % date))
                     #(remove #{date} %))]
     (set-data-param
     (swap! state update :tasks
@@ -141,18 +226,6 @@
 
 
 
-(defn get-data-from-url
-  []
-  (->> js/window
-       (.-location)
-       (.-search)
-       (new js/URLSearchParams)
-       (seq)
-       (js->clj)
-       (into {})
-       (walk/keywordize-keys)
-       :data
-       edn/read-string))
 
 (defn app []
   (r/create-class
@@ -169,15 +242,22 @@
     (fn []
       (let [_ @state]
         [:<>
+         ;; State debug
          #_[:p (str @state)]
+         #_[:p (edn->state-str @state)]
+         #_[:p (str (url-data->edn (edn->state-str @state)))]
+         ;; -----------
+         
          [:nav.container-fluid
           [:ul
            [:li
             [:a {:href "http://www.lzeitlin.xyz/"}
-             "lz blog"]]]
+             "lz blog"]]
+          
           [:ul
-           [:li [:strong (-> @state :email)]]]
+           [:li (-> @state :email)]]
           ]
+         [:h1 {:style {:text-align "center"}} "octahabit"]
          [:main.container 
           (if (string/blank? (-> @state :email))
             [:article
@@ -190,7 +270,7 @@
              [:button {:on-click #(swap! state
                                          assoc
                                          :email
-                                         @email-address-state )}
+                                         @email-address-state)}
               "add email address"]]
             [:div
              [:button
