@@ -252,11 +252,9 @@
           [:ul
            [:li
             [:a {:href "http://www.lzeitlin.xyz/"}
-             "lz blog"]]
-          
+             "lz blog"]]]
           [:ul
-           [:li (-> @state :email)]]
-          ]
+           [:li (-> @state :email)]]]
          [:h1 {:style {:text-align "center"}} "octahabit"]
          [:main.container 
           (if (string/blank? (-> @state :email))
