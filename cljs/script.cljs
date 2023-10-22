@@ -140,8 +140,10 @@
 (defn reset-enter-task-field []
   (reset! enter-task-state ""))
 
-(defn input [{:keys [id label name input-type placeholder atom]}]
-  [:label {:for id} label
+(defn input [{:keys [id label name input-type placeholder atom
+                     subtext]}]
+  [:<>
+   [:label {:for id} label]
    [:input {:type input-type
             :id id
             :name name
@@ -149,7 +151,9 @@
             :value @atom
             :on-change #(reset! atom (-> %
                                          .-target
-                                         .-value))}]])
+                                         .-value))}]
+   (when subtext
+     [:small subtext])])
 
 
 (def cell-style {:vertical-align "middle"
@@ -336,15 +340,20 @@
          [:main.container 
           (if (string/blank? (-> @state :email))
             [:article
-             [:p "👋 new to octohabit? i recommend reading the "
+             [:p "👋 new to " [:strong "octohabit"]
+              "? i recommend reading the "
               [:a {:on-click #(reset! about-open? true)}
-               "about"]]
+               "about"]
+              "."]
              [input {:id "enter_email_address"
                      :label "email address"
                      :input-type "email"
                      :name "email"
                      :placeholder "your email address"
-                     :atom email-address-state}]
+                     :atom email-address-state
+                     :subtext "no validation, i just trust
+                               you to type your own email address
+                               correctly 😱" }]
              [:button {:on-click #(swap! state
                                          assoc
                                          :email
@@ -362,8 +371,9 @@
                          :label "new habit"
                          :input-type "text"
                          :name "task"
-                         :placeholder "go for a walk"
-                         :atom enter-task-state}]
+                         :placeholder "go on a 🚶‍♀️"
+                         :atom enter-task-state
+                         :subtext "the house-style is lowercase and emojis but you do you 🪴"}]
                  [:button
                   {:on-click #(do (append-task)
                                   (reset-enter-task-field)
