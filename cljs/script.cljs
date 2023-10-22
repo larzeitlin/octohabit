@@ -159,16 +159,23 @@
 (def cell-style {:vertical-align "middle"
                  :text-align "center"})
 
+(def days-of-week ["su" "mo" "tu" "we" "th" "fr" "sa"])
+
 (defn table-date-row [{:keys [date-now n-days]}]
   (into 
    [:tr
     [:th ""]
     [:th ""]]
-   (map #(vector :td {:style cell-style}
-                 (->> (- date-now (* % DAY-MILLIS))
-                      (js/Date.)
-                      (.getDate)
-                      ))
+   (map (fn [d]
+          (let [jsDate (->> (- date-now (* d DAY-MILLIS))
+                            (js/Date.)
+                            )]
+            [:td {:style cell-style}
+             [:strong 
+              (->> jsDate (.getDay) (get days-of-week))]
+             "\n"
+             (.getDate jsDate)])
+          )
         (range 0 n-days 1))))
 
 (defn toggle-checkbox [{:keys [checkbox date id]}]
@@ -207,7 +214,13 @@
                   checkbox-id (str (:title task)
                                    "-"
                                    date)]
-              [:td {:style cell-style}
+              [:td {:style (merge cell-style
+                                  (when (= d 0)
+                                    {:background-color
+                                     "#1095c122"
+                                     :border-left "1px solid #00000055"
+                                     :border-right "1px solid #00000055"
+                                    }))}
                [:input {:type "checkbox"
                         :checked (->> task :dates (some #{date}))
                         :on-click #(toggle-checkbox {:checkbox %
@@ -217,7 +230,10 @@
                                 :display "block"
                                 :margin "auto"
                                 :width "2em"
-                                :height "2em"}
+                                :height "2em"
+                                :background-color (if (->> task :dates (some #{date}))
+                                                    "#1095c1"
+                                                    "white")}
                         :id checkbox-id}]])))]))
 
 (defn checkbox-table [{:keys [n-days tasks date-now]}]
