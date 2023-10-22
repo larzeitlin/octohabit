@@ -314,76 +314,77 @@
          #_[:p (str (url-data->edn (edn->state-str @state)))]
          ;; -----------
          [about-modal]
-         
-         [:nav.container-fluid
-          [:ul
-           [:li
-            [:a {:href "http://www.lzeitlin.xyz/"}
-             "lz blog"]]]
-          [:ul
-           [:li [:a {:data-target "about-modal"
-                     :on-click #(reset! about-open? true)}
-                 "about"]]
-           [:li
-            (when (-> @state :email string/blank? not)
-              [:details {:role "list" :dir "rtl"}
-               [:summary {:aria-haspopup "listbox"
-                          :role "link"}
-                (-> @state :email)]
-               [:ul {:role "listbox"}
-                [:li [:button {:on-click send-data-via-email}
-                      "save to email"]]]])]]]
-         [:hgroup {:style {:text-align "center"}}
-          [:h1 "🐙 octohabit"]
-          [:h3 "the 8-track, email-based habit tracker"]]
-         
-         [:main.container 
-          (if (string/blank? (-> @state :email))
-            [:article
-             [:p "👋 new to " [:strong "octohabit"]
-              "? i recommend reading the "
-              [:a {:on-click #(reset! about-open? true)}
-               "about"]
-              "."]
-             [input {:id "enter_email_address"
-                     :label "email address"
-                     :input-type "email"
-                     :name "email"
-                     :placeholder "your email address"
-                     :atom email-address-state
-                     :subtext "no validation, i just trust
+         [:main.container-fluid
+          
+          [:nav.container-fluid
+           [:ul
+            [:li
+             [:a {:href "http://www.lzeitlin.xyz/"}
+              "lz blog"]]]
+           [:ul
+            [:li [:a {:data-target "about-modal"
+                      :on-click #(reset! about-open? true)}
+                  "about"]]
+            [:li
+             (when (-> @state :email string/blank? not)
+               [:details {:role "list" :dir "rtl"}
+                [:summary {:aria-haspopup "listbox"
+                           :role "link"}
+                 (-> @state :email)]
+                [:ul {:role "listbox"}
+                 [:li [:button {:on-click send-data-via-email}
+                       "save to email"]]]])]]]
+          [:hgroup {:style {:text-align "center"}}
+           [:h1 "🐙 octohabit"]
+           [:h3 "the 8-track, email-based habit tracker"]]
+          
+          [:container 
+           (if (string/blank? (-> @state :email))
+             [:article
+              [:p "👋 new to " [:strong "octohabit"]
+               "? i recommend reading the "
+               [:a {:on-click #(reset! about-open? true)}
+                "about"]
+               "."]
+              [input {:id "enter_email_address"
+                      :label "email address"
+                      :input-type "email"
+                      :name "email"
+                      :placeholder "your email address"
+                      :atom email-address-state
+                      :subtext "no validation, i just trust
                                you to type your own email address
                                correctly 😱" }]
-             [:button {:on-click #(swap! state
-                                         assoc
-                                         :email
-                                         @email-address-state)}
-              "add email address"]]
-            [:div 
-             (if (->> @state :tasks count (< 7))
-               [:article "All eight habit slots filled. Keep it up!"]
-               [:details {:open true}
-                [:summary {:role "button"
-                           :style {:text-align "left"}}
-                 "add habits"]
-                [:div 
-                 [input {:id "enter_task"
-                         :label "new habit"
-                         :input-type "text"
-                         :name "task"
-                         :placeholder "go on a 🚶‍♀️"
-                         :atom enter-task-state
-                         :subtext "the house-style is lowercase and emojis but you do you 🪴"}]
-                 [:button
-                  {:on-click #(do (append-task)
-                                  (reset-enter-task-field)
-                                  (set-data-param @state))
-                   :disabled (string/blank? @enter-task-state)}
-                  "+"]]])
-             (when (seq (-> @state :tasks))
-               [checkbox-table {:n-days N-DAYS
-                                :tasks (->> @state :tasks (sort-by :id))
-                                :date-now DATE-NOW}])])]]))}))
+              [:button {:on-click #(swap! state
+                                          assoc
+                                          :email
+                                          @email-address-state)}
+               "add email address"]]
+             [:div 
+              (if (->> @state :tasks count (< 7))
+                [:article "All eight habit slots filled. Keep it up!"]
+                [:details {:open true}
+                 [:summary {:role "button"
+                            :style {:text-align "left"}}
+                  "add habits"]
+                 [:div 
+                  [input {:id "enter_task"
+                          :label "new habit"
+                          :input-type "text"
+                          :name "task"
+                          :placeholder "go on a 🚶‍♀️"
+                          :atom enter-task-state
+                          :subtext "the house-style is lowercase and emojis but you do you 🪴"}]
+                  [:button
+                   {:on-click #(do (append-task)
+                                   (reset-enter-task-field)
+                                   (set-data-param @state))
+                    :disabled (string/blank? @enter-task-state)}
+                   "+"]]])
+              (when (seq (-> @state :tasks))
+                [checkbox-table {:n-days N-DAYS
+                                 :tasks (->> @state :tasks (sort-by :id))
+                                 :date-now DATE-NOW}])])]]]))}))
 
 (rdom/render [app] (.getElementById js/document "app"))
 
