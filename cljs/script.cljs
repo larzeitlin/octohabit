@@ -15,6 +15,7 @@
 (def state (r/atom nil))
 (def enter-task-state (r/atom ""))
 (def email-address-state (r/atom ""))
+(def about-open? (r/atom false))
 
 (defn pad [n val coll]
   (take n (concat coll (repeat val))))
@@ -82,7 +83,6 @@
         [start-date email & rst] (string/split decoded-str #",")
         [habit-names history-arrays] (split-at 8 rst)
         habit-names (remove string/blank? habit-names) 
-        _ (js/console.log (str history-arrays))
         history-arrays (map (partial binary-string->dates start-date)
                             history-arrays)
         habits (map
@@ -226,7 +226,40 @@
        [checkbox-row {:task task :n-days n-days}])]]])
 
 
-
+(defn about-modal []
+  [:dialog {:open @about-open?}
+   [:article
+    [:a {:on-click #(reset! about-open? false)
+         :class "close"}]
+    [:h1 "welcome to octohabit"]
+    [:p "octohabit is a super simple habit tracker with a slightly unorthodox
+         implementation. your data is your own. i don't want it but i make it
+         easy for you to look after it. there is no backend service to process 
+         your data. this is all \"client side\"."]
+    [:p "limitations can help us on our journey. octohabit has some.
+         you can only have up to eight habits.
+         you can only store up to around two years of data.
+         continue reading to understand why."]
+    [:h3 "how it works"]
+    
+    [:p "there is no login or signup process. you simply add your email address
+         to the app. when you have logged your habits click your email address 
+         and then click \"save to email\". this will open up your email client and
+         you will send yourself an email with a link that contains all your current data.
+         do this whenever you use the app. rather than logging in just go to your
+         email inbox and click the latest link. you can think of it like a magic-link
+         login but backwards. compression is used to squeeze a whole bunch of data into
+         the url (which has a character limit). this is the reason for the limitations
+         above."]
+    [:h3 "won't this flood my inbox with emails?"]
+    [:p "i use my email client's filtering and labeling tools to move
+         all my habit tracking emails to a folder. this prevents it cluttering my
+         inbox and makes finding the latest link super easy."]
+    [:h3 "technology"]
+    [:p "built with clojurescript / scittle. you can find the code on "
+     [:a {:href "https://github.com/larzeitlin/lzboard"} "github"]
+     ". there is no licence attached to it but feel free to use it however you
+      want and i promise to not be upset."]]])
 
 (defn app []
   (r/create-class
@@ -248,6 +281,7 @@
          #_[:p (edn->state-str @state)]
          #_[:p (str (url-data->edn (edn->state-str @state)))]
          ;; -----------
+         [about-modal]
          
          [:nav.container-fluid
           [:ul
@@ -255,34 +289,44 @@
             [:a {:href "http://www.lzeitlin.xyz/"}
              "lz blog"]]]
           [:ul
-           [:li (-> @state :email)]]]
-         [:h1 {:style {:text-align "center"}} "octahabit"]
+           [:li [:a {:data-target "about-modal"
+                     :on-click #(reset! about-open? true)}
+                 "about"]]
+           [:li
+            (when (-> @state :email string/blank? not)
+              [:details {:role "list" :dir "rtl"}
+               [:summary {:aria-haspopup "listbox"
+                          :role "link"}
+                (-> @state :email)]
+               [:ul {:role "listbox"}
+                [:li [:button {:on-click send-data-via-email}
+                      "save to email"]]]])]]]
+         [:h1 {:style {:text-align "center"}} "octohabit"]
          [:main.container 
           (if (string/blank? (-> @state :email))
             [:article
+             [:p "new to octohabit? i recommend reading the "
+              [:a {:on-click #(reset! about-open? true)}
+               "about"]]
              [input {:id "enter_email_address"
-                     :label "Email Address"
+                     :label "email address"
                      :input-type "email"
                      :name "email"
-                     :placeholder "Your email address"
+                     :placeholder "your email address"
                      :atom email-address-state}]
              [:button {:on-click #(swap! state
                                          assoc
                                          :email
                                          @email-address-state)}
               "add email address"]]
-            [:div
-             [:button
-              {:on-click send-data-via-email
-               :style {:text-align "left"}}
-              "save to email"]
+            [:div 
              (if (->> @state :tasks count (< 7))
                [:article "All eight habit slots filled. Keep it up!"]
                [:details {:open true}
                 [:summary {:role "button"
                            :style {:text-align "left"}}
                  "add habits"]
-                [:article 
+                [:div 
                  [input {:id "enter_task"
                          :label "new habit"
                          :input-type "text"
