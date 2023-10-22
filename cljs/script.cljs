@@ -122,7 +122,7 @@
         encoded-body (js/encodeURIComponent body)
         mailto-link (str "mailto:" address "?subject=" subject "&body=" encoded-body)]
     (swap! state assoc :email address)
-    (js/window.open mailto-link)))
+    (set! (.-href js/window.location) mailto-link)))
 
 (defn append-task []
   (set-data-param
