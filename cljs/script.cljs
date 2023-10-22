@@ -228,10 +228,11 @@
 
 (defn about-modal []
   [:dialog {:open @about-open?}
-   [:article
+   [:article {:style {:text-align "center"}}
     [:a {:on-click #(reset! about-open? false)
          :class "close"}]
     [:hgroup
+     [:h1 "🐙"]
      [:h1 "welcome to octohabit"]
      [:h3 "the 8-track, email-based habit tracker"]]
     [:p "octohabit is a super simple habit tracker with a slightly unorthodox
@@ -281,7 +282,7 @@
           now though!"]
     [:h6 "i prefer a normal login process / mobile app / etc"]
     [:p "hey that's fine. this one isn't for you. best of luck on your habit
-           tracking journey."]
+           tracking journey. ✌️"]
     [:h3 "technology"]
     [:p "built with clojurescript / scittle. you can find the code on "
      [:a {:href "https://github.com/larzeitlin/lzboard"} "github"]
@@ -328,11 +329,14 @@
                [:ul {:role "listbox"}
                 [:li [:button {:on-click send-data-via-email}
                       "save to email"]]]])]]]
-         [:h1 {:style {:text-align "center"}} "octohabit"]
+         [:hgroup {:style {:text-align "center"}}
+          [:h1 "🐙 octohabit"]
+          [:h3 "the 8-track, email-based habit tracker"]]
+         
          [:main.container 
           (if (string/blank? (-> @state :email))
             [:article
-             [:p "new to octohabit? i recommend reading the "
+             [:p "👋 new to octohabit? i recommend reading the "
               [:a {:on-click #(reset! about-open? true)}
                "about"]]
              [input {:id "enter_email_address"
