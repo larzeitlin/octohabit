@@ -82,12 +82,13 @@
         [start-date email & rst] (string/split decoded-str #",")
         [habit-names history-arrays] (split-at 8 rst)
         habit-names (remove string/blank? habit-names) 
+        _ (js/console.log (str history-arrays))
         history-arrays (map (partial binary-string->dates start-date)
                             history-arrays)
         habits (map
                   (fn [n arr id] {:title n :dates arr :id id})
                   habit-names
-                  history-arrays
+                  (pad (count habit-names) [] history-arrays)
                   (range (count habit-names)))]
     {:email email
      :tasks habits}))
@@ -275,23 +276,25 @@
               {:on-click send-data-via-email
                :style {:text-align "left"}}
               "save to email"]
-             [:details
-              [:summary {:role "button"
-                         :style {:text-align "left"}} "add habits"]
-              
-              [:article 
-               [input {:id "enter_task"
-                       :label "new habit"
-                       :input-type "text"
-                       :name "task"
-                       :placeholder "go for a walk"
-                       :atom enter-task-state}]
-               [:button
-                {:on-click #(do (append-task)
-                                (reset-enter-task-field)
-                                (set-data-param @state))
-                 :disabled (string/blank? @enter-task-state)}
-                "+"]]]
+             (if (->> @state :tasks count (< 7))
+               [:article "All eight habit slots filled. Keep it up!"]
+               [:details {:open true}
+                [:summary {:role "button"
+                           :style {:text-align "left"}}
+                 "add habits"]
+                [:article 
+                 [input {:id "enter_task"
+                         :label "new habit"
+                         :input-type "text"
+                         :name "task"
+                         :placeholder "go for a walk"
+                         :atom enter-task-state}]
+                 [:button
+                  {:on-click #(do (append-task)
+                                  (reset-enter-task-field)
+                                  (set-data-param @state))
+                   :disabled (string/blank? @enter-task-state)}
+                  "+"]]])
              (when (seq (-> @state :tasks))
                [checkbox-table {:n-days N-DAYS
                                 :tasks (->> @state :tasks (sort-by :id))
