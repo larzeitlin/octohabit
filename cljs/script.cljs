@@ -384,7 +384,7 @@
              [:div 
               (if (->> @state :tasks count (< 7))
                 [:article "All eight habit slots filled. Keep it up!"]
-                [:details {:open true}
+                [:details #_{:open true}
                  [:summary {:role "button"
                             :style {:text-align "left"}}
                   "add habits"]
