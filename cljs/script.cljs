@@ -10,8 +10,7 @@
 (def N-DAYS 7)
 (def MAX-HABITS 8)
 
-(def chart-width 50)
-
+(def selected-day-atom (r/atom (js/Date.)))
 (def state (r/atom nil))
 (def enter-task-state (r/atom ""))
 (def email-address-state (r/atom ""))
@@ -137,6 +136,11 @@
                                  #(= (:id %) id)
                                  tasks)))))
 
+(defn change-selected-day [n-days]
+  (swap! selected-day-atom
+         #(js/Date.
+           (+ (.getTime %) (* n-days DAY-MILLIS)))))
+
 (defn reset-enter-task-field []
   (reset! enter-task-state ""))
 
@@ -160,6 +164,8 @@
                  :text-align "center"})
 
 (def days-of-week ["su" "mo" "tu" "we" "th" "fr" "sa"])
+(def months-of-year ["jan" "feb" "mar" "apr" "may" "jun"
+                     "jul" "aug" "sep" "oct" "nov" "dec"])
 
 (defn table-date-row [{:keys [date-now n-days]}]
   (into 
@@ -174,8 +180,7 @@
              [:strong 
               (->> jsDate (.getDay) (get days-of-week))]
              "\n"
-             (.getDate jsDate)])
-          )
+             (.getDate jsDate)]))
         (range 0 n-days 1))))
 
 (defn toggle-checkbox [{:keys [checkbox date id]}]
@@ -191,7 +196,6 @@
                  (update t :dates update-fn)
                  t)))))))
 
-
 (defn checkbox-row [{:keys [task n-days]}]
   (into [:tr 
          [:td {:style cell-style}
@@ -201,13 +205,13 @@
                     :margin "auto"
                     :width "2em"
                     :height "2em"}
-                    :on-click #(delete-task (:id task))}
-               "☒"]]
+            :on-click #(delete-task (:id task))}
+           "☒"]]
          [:th [:div (:title task)]]
          (conj
           (for [d (range 0 n-days 1)]
             (let [date (->> 
-                        (- DATE-NOW (* d DAY-MILLIS))
+                        (- @selected-day-atom (* d DAY-MILLIS))
                         (js/Date.)
                         (.toISOString)
                         (#(subs % 0 10))) 
@@ -219,8 +223,7 @@
                                     {:background-color
                                      "#1095c122"
                                      :border-left "1px solid #00000055"
-                                     :border-right "1px solid #00000055"
-                                    }))}
+                                     :border-right "1px solid #00000055"}))}
                [:input {:type "checkbox"
                         :checked (->> task :dates (some #{date}))
                         :on-click #(toggle-checkbox {:checkbox %
@@ -231,7 +234,9 @@
                                 :margin "auto"
                                 :width "2em"
                                 :height "2em"
-                                :background-color (if (->> task :dates (some #{date}))
+                                :background-color (if (->> task
+                                                           :dates
+                                                           (some #{date}))
                                                     "#1095c1"
                                                     "white")}
                         :id checkbox-id}]])))]))
@@ -390,7 +395,7 @@
                           :name "task"
                           :placeholder "go on a 🚶‍♀️"
                           :atom enter-task-state
-                          :subtext "the house-style is lowercase and emojis but you do you 🪴"}]
+                          :subtext "house-style is lowercase and emojis but you do you 🪴"}]
                   [:button
                    {:on-click #(do (append-task)
                                    (reset-enter-task-field)
@@ -398,9 +403,28 @@
                     :disabled (string/blank? @enter-task-state)}
                    "+"]]])
               (when (seq (-> @state :tasks))
-                [checkbox-table {:n-days N-DAYS
-                                 :tasks (->> @state :tasks (sort-by :id))
-                                 :date-now DATE-NOW}])])]]]))}))
+                [:div
+                 [:div {:style {:display "flex"
+                                :justify-content "center"}}
+                  [:td [:button
+                        {:on-click #(change-selected-day 1)} "⇦"]]
+                  [:th {:colspan "3"} [:input {:type "date"
+                                               :id "date"
+                                               :name "date"
+                                               :value (-> @selected-day-atom
+                                                          (.toISOString)
+                                                          (subs 0 10))
+                                               :on-change #(->> %
+                                                                .-target
+                                                                .-value
+                                                                (js/Date.)
+                                                                (reset! selected-day-atom))}]]
+                  [:td [:button
+                        {:on-click #(change-selected-day -1)} "⇨"]]]
+                 
+                 [checkbox-table {:n-days N-DAYS
+                                  :tasks (->> @state :tasks (sort-by :id))
+                                  :date-now @selected-day-atom}]])])]]]))}))
 
 (rdom/render [app] (.getElementById js/document "app"))
 
