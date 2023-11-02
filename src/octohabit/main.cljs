@@ -185,7 +185,8 @@
                  :justify-content "center"}}
    [:td
     [:button
-     {:on-click #(actions/change-selected-day selected-day-state 1)} "⇦"]]
+     {:on-click #(actions/change-selected-day selected-day-state 1)}
+     "⇦"]]
    [:th {:colspan "3"}
     [:input {:type "date"
              :id "date"
@@ -199,7 +200,8 @@
                               (js/Date.)
                               (reset! selected-day-state))}]]
    [:td [:button
-         {:on-click #(actions/change-selected-day selected-day-state -1)} "⇨"]]])
+         {:on-click #(actions/change-selected-day selected-day-state -1)}
+         "⇨"]]])
 
 (defn app []
   (r/create-class
