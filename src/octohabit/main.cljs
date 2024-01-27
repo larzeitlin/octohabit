@@ -8,14 +8,29 @@
    [octohabit.data :as data]
    [octohabit.common :as common]))
 
-(def selected-day-state (r/atom (js/Date.)))
+(def Bar js/Recharts.Bar)
+(def BarChart js/Recharts.BarChart)
+(def XAxis js/Recharts.XAxis)
+(def ResponsiveContainer js/Recharts.ResponsiveContainer)
+
+(def today
+  (->>
+   (.toISOString (js/Date.))
+   (#(subs % 0 10))
+   (js/Date.)))
+
+(def selected-day-state (r/atom today))
 (def app-state (r/atom nil))
 (def enter-task-state (r/atom ""))
 (def email-address-state (r/atom ""))
 (def about-open? (r/atom false))
+(def hovered-habit (r/atom nil))
 
-(defn input [{:keys [id label name input-type placeholder atom
-                     subtext]}]
+(defn ->value [element]
+  (-> element .-target .-value))
+
+(defn input [{:keys [id label name input-type
+                     placeholder atom subtext]}]
   [:<>
    [:label {:for id} label]
    [:input {:type input-type
@@ -23,15 +38,14 @@
             :name name
             :placeholder placeholder
             :value @atom
-            :on-change #(reset! atom (-> %
-                                         .-target
-                                         .-value))}]
+            :on-change #(reset! atom (->value %))}]
    (when subtext
      [:small subtext])])
 
 (def checkbox-table-cell-style
   {:vertical-align "middle"
-   :text-align "center"})
+   :text-align "center"
+   :white-space "nowrap"})
 
 (def days-of-week ["su" "mo" "tu" "we" "th" "fr" "sa"])
 (def months-of-year ["jan" "feb" "mar" "apr" "may" "jun"
@@ -48,7 +62,7 @@
             [:td {:style checkbox-table-cell-style}
              [:strong
               (->> jsDate (.getDay) (get days-of-week))]
-             "\n"
+             " "
              (.getDate jsDate)]))
         (range 0 n-days 1))))
 
@@ -83,31 +97,38 @@
                     :height "2em"}
             :on-click #(actions/delete-task app-state (:id task))}
            "☒"]]
-         [:th [:div (:title task)]]
+         [:th [:div
+               {:onMouseOver #(reset! hovered-habit (:id task))
+                :onMouseOut #(reset! hovered-habit nil)}
+               (:title task)]]
          (conj
           (for [d (range 0 n-days 1)]
             (let [date (->>
-                        (- @selected-day-state (* d common/DAY-MILLIS))
-                        (js/Date.)
-                        (.toISOString)
-                        (#(subs % 0 10)))
+                        (- @selected-day-state
+                           (* d common/DAY-MILLIS))
+                        (js/Date.))
+                  date-str (->>
+                            date
+                            (.toISOString)
+                            (#(subs % 0 10)))
                   checkbox-id (str (:title task)
                                    "-"
-                                   date)]
+                                   date-str)]
               [:td {:style (merge checkbox-table-cell-style
-                                  (when (= d 0)
+                                  (when (= date today)
                                     {:background-color
                                      "#1095c122"
                                      :border-left "1px solid #00000055"
                                      :border-right "1px solid #00000055"}))}
-               [checkbox date task checkbox-id]])))]))
+               [checkbox date-str task checkbox-id]])))]))
 
 (defn checkbox-table [{:keys [n-days tasks date-now]}]
   [:div.container-fluid
    [:figure
     [:table {:style {:text-align "center"}}
-     [checkbox-table-date-row {:date-now date-now
-                      :n-days n-days}]
+     [checkbox-table-date-row
+      {:date-now date-now
+       :n-days n-days}]
      (for [task tasks]
        [checkbox-row {:task task :n-days n-days}])]]])
 
@@ -161,7 +182,7 @@
     "add email address"]])
 
 (defn add-habits-form []
-  [:details #_{:open true}
+  [:details
    [:summary {:role "button"
               :style {:text-align "left"}}
     "add habits"]
@@ -180,61 +201,102 @@
       :disabled (string/blank? @enter-task-state)}
      "+"]]])
 
+(def date-control-style {:margin "0.5em"})
+
 (defn date-control []
   [:div {:style {:display "flex"
                  :justify-content "center"}}
-   [:td
-    [:button
-     {:on-click #(actions/change-selected-day selected-day-state 1)}
-     "⇦"]]
-   [:th {:colspan "3"}
-    [:input {:type "date"
-             :id "date"
-             :name "date"
-             :value (-> @selected-day-state
-                        (.toISOString)
-                        (subs 0 10))
-             :on-change #(->> %
-                              .-target
-                              .-value
-                              (js/Date.)
-                              (reset! selected-day-state))}]]
-   [:td [:button
-         {:on-click #(actions/change-selected-day selected-day-state -1)}
-         "⇨"]]])
+   [:button
+    {:style date-control-style
+     :on-click #(actions/change-selected-day selected-day-state 1)}
+    "forward"]
+   [:input {:type "date"
+            :id "date"
+            :name "date"
+            :style date-control-style
+            :value (-> @selected-day-state
+                       (.toISOString)
+                       (subs 0 10))
+            :on-change #(->> %
+                             ->value
+                             (js/Date.)
+                             (reset! selected-day-state))}]
+   [:button
+    {:style date-control-style
+     :on-click #(reset! selected-day-state today)}
+    "today"]
+   [:button
+    {:style date-control-style
+     :on-click #(actions/change-selected-day selected-day-state -1)}
+    "backward"]])
+
+(defn app-mount-fn []
+  (let [url-param-data
+        (or (data/get-data-from-url)
+            {:tasks [{:title "default"
+                      :dates []
+                      :id 0}]})]
+    (reset! app-state url-param-data)))
+
+(defn- rolling-chart []
+  (let [habit-id @hovered-habit
+        habit-data (some->> @app-state
+                            :tasks
+                            (filter #(= (:id %) habit-id))
+                            first)
+        per-month (some->> habit-data
+                           :dates
+                           (group-by #(subs % 0 7))
+                           (reduce-kv (fn [acc k v]
+                                        (conj acc {:month k
+                                                   :count (count v)}))
+                                      [])
+                           (sort-by :month)
+                           (reverse))]
+    (when habit-id
+      [:div
+       [:hgroup {:style {:text-align "center"}}
+        [:h3 (:title habit-data)]]
+       [:> ResponsiveContainer {:width "100%"
+                                :height "20%"}
+        [:> BarChart {:width 500
+                      :height 500
+                      :data (clj->js per-month)}
+         [:> XAxis {:dataKey "month"}]
+         [:> Bar {:dataKey "count"
+                  :fill "#1095c1"}]]]
+       [:hgroup {:style {:text-align "center"}}
+        [:h3 "you are doing gr8"]]
+       ])))
+
+(defn app-render-fn []
+  (let [_ @app-state]
+    [:<>
+     [about/modal about-open?]
+     [:main.container-fluid
+      [nav-row]
+      [title]
+      [:container
+       (if (string/blank? (-> @app-state :email))
+         [new-user-flow]
+         [:div
+          (if (->> @app-state :tasks count (< 7))
+            [:article "All eight habit slots filled. Keep it up!"]
+            [add-habits-form])
+          (when (seq (-> @app-state :tasks))
+            [:div
+             [date-control]
+             [checkbox-table
+              {:n-days common/N-DAYS
+               :tasks (->> @app-state :tasks (sort-by :id))
+               :date-now @selected-day-state}]
+             [rolling-chart]])
+          ])]]]))
 
 (defn app []
   (r/create-class
-   {:display-name "lzb-app"
-    :component-did-mount
-    (fn []
-      (let [url-param-data
-            (or (data/get-data-from-url)
-                {:tasks [{:title "default"
-                          :dates []
-                          :id 0}]})]
-        (reset! app-state url-param-data)))
-    :reagent-render
-    (fn []
-      (let [_ @app-state]
-        [:<>
-         [about/modal about-open?]
-         [:main.container-fluid
-          [nav-row]
-          [title]
-          [:container
-           (if (string/blank? (-> @app-state :email))
-             [new-user-flow]
-             [:div
-              (if (->> @app-state :tasks count (< 7))
-                [:article "All eight habit slots filled. Keep it up!"]
-                [add-habits-form])
-              (when (seq (-> @app-state :tasks))
-                [:div
-                 [date-control]
-                 [checkbox-table {:n-days common/N-DAYS
-                                  :tasks (->> @app-state :tasks (sort-by :id))
-                                  :date-now @selected-day-state}]])])]]]))}))
+   {:component-did-mount app-mount-fn
+    :reagent-render app-render-fn}))
 
 (rdom/render [app] (.getElementById js/document "app"))
 
